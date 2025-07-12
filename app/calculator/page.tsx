@@ -22,15 +22,48 @@ import {
   User,
 } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
+interface Project {
+  id: number
+  name: string
+  date: string
+  network_type: string
+  description: string
+  status: string
+  created_at: string
+}
+interface User {
+  first_name: string
+  email: string
+}
 export default function CalculatorPage() {
+  const [recentProjects, setRecentProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [projectId, setProjectId] = useState<string>("")
+  const [selectedProjectDetails, setSelectedProjectDetails] = useState<{
+    name: string;
+    network_type: string;
+  } | null>(null)
+ 
+  const [newResults, setNewResults] = useState({
+    cellRadius: 2.5,
+    coveredArea: 19.6,
+    numberOfSites: 12,
+    totalTraffic: 625,
+    trxPerSite: 8,
+    totalChannels: 96,
+    spectralEfficiency: 0.65,
+    siteEfficiency: 78,
+    coverageReliability: 95,
+  })
   const [parameters, setParameters] = useState({
     // Zone parameters
     surface: 100,
     population: 50000,
-    zoneType: "urbaine-dense",
+    zoneType: "urban_dense",
     penetrationRate: 85,
     bhcaPerSubscriber: 1.5,
 
@@ -59,12 +92,149 @@ export default function CalculatorPage() {
     coverageReliability: 95,
   })
 
-  const recentProjects = [
-    { id: 1, name: "Projet Dakar Centre", date: "2024-12-28", type: "GSM 900" },
-    { id: 2, name: "Couverture Thiès", date: "2024-12-27", type: "GSM 1800" },
-    { id: 3, name: "Réseau Kaolack", date: "2024-12-25", type: "GSM 900/1800" },
-    { id: 4, name: "Planification Ziguinchor", date: "2024-12-24", type: "GSM 900" },
-  ]
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const id = params.get("project")
+    if (id) {
+    setProjectId(id) 
+      fetch(`http://localhost:8000/api/projects/${id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Erreur lors du chargement du projet")
+          const data = await res.json()
+          console.log("Projet récupéré:", data)
+          setSelectedProjectDetails({
+            name: data.name,
+            network_type: data.network_type,
+          })
+        })
+        .catch((err) => {
+          console.error(err)
+          alert("Impossible de charger le projet")
+        })
+      }
+  }, [])
+
+   
+  
+   useEffect(() => {
+      fetch("http://localhost:8000/api/recentprojects", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Erreur lors du chargement des projets")
+          const data = await res.json()
+          setRecentProjects(data)
+        })
+        .catch((err) => {
+          console.error(err)
+          alert("Impossible de charger les projets")
+        })
+    }, [])
+
+       useEffect(() => {
+          // Simuler une récupération de l'utilisateur connecté
+          const token= localStorage.getItem("token")
+          if(!token){
+            setLoading(false)
+            return 
+          }
+      
+          fetch("http://localhost:8000/api/users/me",{
+            headers:{
+              Authorization : `Bearer ${token}`,
+            }
+          }) 
+          .then(async(res)=>{
+            if(!res.ok) throw new Error("Impossible de récupérer le profil")
+             const data = await res.json()
+             setUser(data)
+          })
+          .catch((err) =>{
+              console.error(err)
+              localStorage.removeItem("token") // On enléve le token invalide
+          })
+          .finally(() =>setLoading(false))
+        }, [])
+const calculateDimensioning  = async  () => {
+      if (!projectId) {
+        alert("Projet non sélectionné.")
+        return
+      }
+
+      const newResults = {
+        cellRadius: Math.round(Math.sqrt(parameters.surface / Math.PI) * 0.8 * 10) / 10,
+        coveredArea: parameters.surface,
+        numberOfSites: Math.ceil(parameters.surface / 8.3),
+        totalTraffic: Math.round((parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / 60),
+        trxPerSite: Math.ceil(
+          (parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / (60 * 12)
+        ),
+        totalChannels:
+          Math.ceil((parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / (60 * 12)) *
+          Math.ceil(parameters.surface / 8.3),
+        spectralEfficiency: 0.65,
+        siteEfficiency: Math.round(75 + Math.random() * 10),
+        coverageReliability: Math.round(92 + Math.random() * 6),
+      }
+
+      setResults(newResults)
+      try {
+          console.log("Project ID:", parseInt(projectId));
+          // Appeler l'API avec les nouveaux résultats
+          const res = await fetch("http://localhost:8000/api/calculations", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+            body: JSON.stringify({
+              project_id: parseInt(projectId),
+              name: "Calcul automatique",
+              surface_area: parameters.surface,
+              population: parameters.population,
+              zone_type: parameters.zoneType,
+              penetration_rate: parameters.penetrationRate,
+              bhca_per_subscriber: parameters.bhcaPerSubscriber,
+              frequency: parameters.frequency,
+              tx_power: parameters.txPower,
+              antenna_gain: parameters.antennaGain,
+              sensitivity: parameters.sensitivity,
+              fade_margin: 10,
+              interference_margin: 3,
+              subscribers: parameters.subscribers,
+              call_duration: parameters.callDuration,
+              // 👇 Utiliser les résultats calculés
+              cell_radius: newResults.cellRadius,
+              covered_area: newResults.coveredArea,
+              number_of_sites: newResults.numberOfSites,
+              total_traffic: newResults.totalTraffic,
+              trx_per_site: newResults.trxPerSite,
+              total_channels: newResults.totalChannels,
+              spectral_efficiency: newResults.spectralEfficiency,
+              site_efficiency: newResults.siteEfficiency,
+              coverage_reliability: newResults.coverageReliability,
+            }),
+          });
+
+          if (!res.ok) throw new Error("Erreur lors de l'enregistrement du calcul");
+
+          const data = await res.json()
+          console.log("Calcul enregistré :", data);
+          alert("Calcul de dimensionnement enregistré avec succès ✅");
+        } catch (err) {
+          console.error(err);
+          alert("Erreur lors de l'enregistrement du calcul");
+        }
+      
+
+}
+  
 
   const generatePDFReport = () => {
     const projectName = "Projet Dakar Centre"
@@ -591,26 +761,30 @@ export default function CalculatorPage() {
     }
   }
 
-  const calculateDimensioning = () => {
-    // Simulation des calculs de dimensionnement
-    const newResults = {
-      cellRadius: Math.round(Math.sqrt(parameters.surface / Math.PI) * 0.8 * 10) / 10,
-      coveredArea: parameters.surface,
-      numberOfSites: Math.ceil(parameters.surface / 8.3),
-      totalTraffic: Math.round((parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / 60),
-      trxPerSite: Math.ceil(
-        (parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / (60 * 12),
-      ),
-      totalChannels:
-        Math.ceil((parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / (60 * 12)) *
-        Math.ceil(parameters.surface / 8.3),
-      spectralEfficiency: 0.65,
-      siteEfficiency: Math.round(75 + Math.random() * 10),
-      coverageReliability: Math.round(92 + Math.random() * 6),
-    }
-    setResults(newResults)
-  }
+  // const calculateDimensioning = () => {
+  //   if (!projectId) {
+  //     alert("Projet non sélectionné.")
+  //     return
+  //   }
 
+  //   const newResults = {
+  //     cellRadius: Math.round(Math.sqrt(parameters.surface / Math.PI) * 0.8 * 10) / 10,
+  //     coveredArea: parameters.surface,
+  //     numberOfSites: Math.ceil(parameters.surface / 8.3),
+  //     totalTraffic: Math.round((parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / 60),
+  //     trxPerSite: Math.ceil(
+  //       (parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / (60 * 12)
+  //     ),
+  //     totalChannels:
+  //       Math.ceil((parameters.subscribers * parameters.bhcaPerSubscriber * parameters.callDuration) / (60 * 12)) *
+  //       Math.ceil(parameters.surface / 8.3),
+  //     spectralEfficiency: 0.65,
+  //     siteEfficiency: Math.round(75 + Math.random() * 10),
+  //     coverageReliability: Math.round(92 + Math.random() * 6),
+  //   }
+
+  //   setResults(newResults)
+  // }
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -633,8 +807,8 @@ export default function CalculatorPage() {
             <div className="flex items-center gap-2">
               <Radio className="w-5 h-5 text-emerald-600" />
               <div>
-                <span className="font-semibold">Projet Dakar Centre</span>
-                <span className="text-sm text-slate-500 ml-2">GSM 900 MHz</span>
+                <span className="font-semibold">{selectedProjectDetails? selectedProjectDetails.name : null}</span>
+                <span className="text-sm text-slate-500 ml-2">{selectedProjectDetails? selectedProjectDetails.network_type : null}</span>
               </div>
             </div>
           </div>
@@ -650,7 +824,7 @@ export default function CalculatorPage() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/profile">
                 <User className="w-4 h-4 mr-2" />
-                Jean D.
+                {user? user.first_name : "Mon Compte"}
               </Link>
             </Button>
           </div>
@@ -677,8 +851,10 @@ export default function CalculatorPage() {
                   >
                     <CardContent className="p-3">
                       <div className="font-medium text-sm text-slate-900">{project.name}</div>
-                      <div className="text-xs text-slate-500 mt-1">{project.type}</div>
-                      <div className="text-xs text-slate-400 mt-1">{project.date}</div>
+                      <div className="text-xs text-slate-500 mt-1">{project.network_type}</div>
+                       <div className="text-xs text-slate-400 mt-1">
+                        {new Date(project.created_at).toLocaleDateString("fr-FR")}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -755,10 +931,10 @@ export default function CalculatorPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="urbaine-dense">Urbaine Dense</SelectItem>
-                          <SelectItem value="urbaine">Urbaine</SelectItem>
-                          <SelectItem value="suburbaine">Suburbaine</SelectItem>
-                          <SelectItem value="rurale">Rurale</SelectItem>
+                          <SelectItem value="urban_dense">Urbaine Dense</SelectItem>
+                          <SelectItem value="urban">Urbaine</SelectItem>
+                          <SelectItem value="suburban">Suburbaine</SelectItem>
+                          <SelectItem value="rural">Rurale</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

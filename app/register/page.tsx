@@ -12,16 +12,49 @@ import Link from "next/link"
 import { useState } from "react"
 
 export default function RegisterPage() {
-  const [isLoading, setIsLoading] = useState(false)
+  const [Loading, setLoading] = useState(false)
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] =useState("")
+  const [organization, setOrganization] = useState("")
+  const [email, setEmail] = useState("")
+  const [role, setRole] =useState("")
+  const [password, setPassword] =useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
-    // Simulate registration
-    setTimeout(() => {
-      setIsLoading(false)
+    if (password !== confirmPassword) {
+      alert("Les mots de passe ne correspondent pas")
+      return
+    }
+      setLoading(true)
+      
+    try{
+      const res = await fetch("http://localhost:8000/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          organization,
+          email,
+          role,
+          password
+        }),
+      })
+      if(!res.ok){
+        const errData =await res.json()
+        throw new Error(errData.detail || "Erreur de l'inscription") 
+      }
+      alert("Compte créer avec succès, vous pouvez maintenant vous connecter")
       window.location.href = "/login"
-    }, 1000)
+    }catch(error: any){
+      console.error("Erreur", error)
+      alert(error.message || "Une erreur s'est produite lors de l'inscription")
+    }finally{
+      setLoading(false)
+    }
+  
   }
 
   return (
@@ -47,27 +80,31 @@ export default function RegisterPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">Prénom</Label>
-                  <Input id="firstName" placeholder="Jean" required />
+                  <Input id="firstName" placeholder="Jean" required value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Nom</Label>
-                  <Input id="lastName" placeholder="Dupont" required />
+                  <Input id="lastName" placeholder="Dupont" required value={lastName}
+                    onChange={(e) => setLastName(e.target.value)} />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="jean.dupont@example.com" required />
+                <Input id="email" type="email" placeholder="jean.dupont@example.com" required  value={email}
+                    onChange={(e) => setEmail(e.target.value)}/>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="organization">Organisation</Label>
-                <Input id="organization" placeholder="Université, Entreprise..." required />
+                <Input id="organization" placeholder="Université, Entreprise..." required value={organization}
+                    onChange={(e) => setOrganization(e.target.value)}/>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="role">Rôle</Label>
-                <Select required>
+                <Select required value={role} onValueChange={setRole}>
                   <SelectTrigger>
                     <SelectValue placeholder="Sélectionner votre rôle" />
                   </SelectTrigger>
@@ -83,16 +120,18 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input id="password" type="password" placeholder="••••••••" required />
+                <Input id="password" type="password" placeholder="••••••••" required value={password}
+                  onChange={(e) => setPassword(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
-                <Input id="confirmPassword" type="password" placeholder="••••••••" required />
+                <Input id="confirmPassword" type="password" placeholder="••••••••" required value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}/>
               </div>
 
-              <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={isLoading}>
-                {isLoading ? "Création du compte..." : "Créer le compte"}
+              <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={Loading}>
+                {Loading ? "Création du compte..." : "Créer le compte"}
               </Button>
             </form>
 

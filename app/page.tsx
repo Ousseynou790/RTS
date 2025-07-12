@@ -1,16 +1,53 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FolderOpen, Plus, Radio, Settings, User, LogIn, UserPlus } from "lucide-react"
+import {Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {FolderOpen, Plus, Radio, Settings, User, LogIn, UserPlus } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect} from "react"
+
+interface User {
+  first_name: string
+  email: string
+}
 
 export default function HomePage() {
   // Simuler l'état de connexion - dans une vraie app, cela viendrait d'un contexte d'auth
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [user, setUser] = useState({ name: "Jean Dupont", email: "jean.dupont@esp.sn" })
+  const [user, setUser] = useState<User | null>(null)
+  const [Loading, setLoading] = useState(true)
+  useEffect(() => {
+    // Simuler une récupération de l'utilisateur connecté
+    const token= localStorage.getItem("token")
+    if(!token){
+      setLoading(false)
+      return 
+    }
 
+    fetch("http://localhost:8000/api/users/me",{
+      headers:{
+        Authorization : `Bearer ${token}`,
+      }
+    }) 
+    .then(async(res)=>{
+      if(!res.ok) throw new Error("Impossible de récupérer le profil")
+       const data = await res.json()
+       setUser(data)
+    })
+    .catch((err) =>{
+        console.error(err)
+        localStorage.removeItem("token") // On enléve le token invalide
+    })
+    .finally(() =>setLoading(false))
+  }, [])
+ 
+  if(Loading){
+    return(
+      <div className="min-h-screen flex items-center justify-center ">
+        chargement ...
+      </div>
+    )
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
@@ -27,20 +64,22 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {isLoggedIn ? (
+            {user ? (
               // Menu utilisateur connecté
               <>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/profile">
                     <User className="w-4 h-4 mr-2" />
-                    {user.name}
+                    {user.first_name}
                   </Link>
                 </Button>
-                <Button variant="ghost" size="sm">
+                {/* <Button variant="ghost" size="sm">
                   <Settings className="w-4 h-4 mr-2" />
                   Paramètres
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setIsLoggedIn(false)}>
+                </Button> */}
+                <Button variant="outline" size="sm" onClick={() => {localStorage.removeItem("token") 
+                setUser(null)}}
+                >
                   Déconnexion
                 </Button>
               </>
@@ -67,12 +106,24 @@ export default function HomePage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12">
-        <div className="max-w-4xl mx-auto">
-          {/* Welcome Section */}
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">
-              {isLoggedIn ? `Bienvenue ${user.name.split(" ")[0]} !` : "Bienvenue dans TelecomDim"}
-            </h2>
+              <div className="max-w-4xl mx-auto">
+                {/* Welcome Section */}
+                <div className="text-center mb-12">
+             {user && user.first_name ? (
+           <>     
+                  <h2 className="text-4xl font-bold text-slate-900 mb-4">
+                    Bienvenue {user.first_name} 
+                  </h2>
+                  
+            </>
+            ):(
+                  <>
+                  <h2 className="text-4xl font-bold text-slate-900 mb-4">
+                    Bienvenue dans TelecomDim
+                  </h2>
+                  
+          </>
+            )}
             <p className="text-xl text-slate-600 max-w-2xl mx-auto">
               Outil professionnel de dimensionnement et planification des réseaux GSM. Créez vos projets et effectuez
               vos calculs de dimensionnement en toute simplicité.
@@ -80,7 +131,7 @@ export default function HomePage() {
           </div>
 
           {/* Action Cards */}
-          {isLoggedIn ? (
+          {user ? (
             <div className="grid md:grid-cols-2 gap-8 mb-12">
               <Card className="group hover:shadow-lg transition-all duration-300 border-2 hover:border-emerald-200">
                 <CardHeader className="text-center pb-4">
@@ -178,7 +229,7 @@ export default function HomePage() {
           </div>
 
           {/* Demo Button for non-logged users */}
-          {!isLoggedIn && (
+          {/* {!isLoggedIn && (
             <div className="text-center mt-8">
               <Button
                 variant="outline"
@@ -189,15 +240,15 @@ export default function HomePage() {
                 🎯 Essayer la démo (simulation connexion)
               </Button>
             </div>
-          )}
+          )} */}
         </div>
       </main>
 
       {/* Footer */}
       <footer className="border-t bg-white/80 backdrop-blur-sm mt-16">
         <div className="container mx-auto px-4 py-6 text-center text-slate-600">
-          <p>© 2024 TelecomDim - Outil de dimensionnement des systèmes de télécommunications</p>
-          <p className="text-sm mt-1">DIC2_INFO/M1_GLSI/DGI/ESP/UCAD - Dr FALL</p>
+          <p>© 2025 TelecomDim - Outil de dimensionnement des systèmes de télécommunications</p>
+          <p className="text-sm mt-1">M1_GLSI/DGI/ESP/UCAD - Dr FALL</p>
         </div>
       </footer>
     </div>

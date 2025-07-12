@@ -8,19 +8,69 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Radio } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
-
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const autofilledPassword = (document.getElementById("password") as HTMLInputElement)?.value
+      if (autofilledPassword && password === "") {
+        setPassword(autofilledPassword)
+      }
+    }, 200)
+    return () => clearTimeout(timeout)
+  }, [])
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false)
+    console.log("email:", email)
+    console.log("password:", password)
+    try {
+      const res = await fetch("http://localhost:8000/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      console.log("Réponse reçue", res.status)
+      if (!res.ok) {
+        const errorData = await res.json()
+        const message =
+        typeof errorData.detail === "string"
+          ? errorData.detail
+          : JSON.stringify(errorData.detail);
+      throw new Error(message);
+      } 
+      const data = await res.json()
+      console.log("Données reçues", data)
+      if (!data.access_token) {
+        throw new Error("Réponse invalide du serveur")
+      }
+
+      localStorage.setItem("token", data.access_token)
+      alert("Connexion réussie!")
+   
+      //  Rediriger
       window.location.href = "/"
-    }, 1000)
+    }
+    catch (error: any) {
+      console.error("Erreur :", error)
+    // Si c'est une erreur d'identifiants
+    if (
+      error.message.includes("Invalid credentials") ||
+      error.message.includes("401") ||
+      error.message.includes("Unauthorized")
+    ) {
+      alert("Identifiants incorrects. Vérifiez votre email et mot de passe.");
+    } else {
+      alert(error.message || "Erreur inconnue");
+    }
+    }
+    finally{
+        setIsLoading(false)
+    }
   }
 
   return (
@@ -45,11 +95,11 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="votre.email@example.com" required />
+                <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Mot de passe</Label>
-                <Input id="password" type="password" placeholder="••••••••" required />
+                <Input id="password" type="password" placeholder="••••••••"  autoComplete="current-password" required value={password}  onChange={(e) => setPassword(e.target.value)}/>
               </div>
               <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={isLoading}>
                 {isLoading ? "Connexion..." : "Se connecter"}
@@ -57,7 +107,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 text-center space-y-2">
-              <Link href="/forgot-password" className="text-sm text-emerald-600 hover:text-emerald-700">
+              <Link href="" className="text-sm text-emerald-600 hover:text-emerald-700">
                 Mot de passe oublié ?
               </Link>
               <div className="text-sm text-slate-600">

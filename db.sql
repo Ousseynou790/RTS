@@ -4,11 +4,13 @@
 -- =====================================================
 
 -- Création de la base de données
-CREATE DATABASE IF NOT EXISTS telecomdim_db 
+CREATE DATABASE IF NOT EXISTS dimensionnement_gsm
 CHARACTER SET utf8mb4 
 COLLATE utf8mb4_unicode_ci;
-
-USE telecomdim_db;
+CREATE USER IF NOT EXISTS 'gsm'@'localhost' IDENTIFIED BY 'Passer123';
+GRANT ALL PRIVILEGES ON dimensionnement_gsm.* TO 'gsm'@'localhost';
+FLUSH PRIVILEGES;   
+USE dimensionnement_gsm;
 
 -- =====================================================
 -- TABLE: users

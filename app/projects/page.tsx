@@ -11,59 +11,137 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Calculator, FileText, FolderOpen, Home, Plus, Radio, Search, Trash2, Edit, User } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
+
+
+interface Project {
+  id: number
+  name: string
+  date: string
+  network_type: string
+  description: string
+  status: string
+}
+interface User {
+  first_name: string
+  email: string
+}
+// Mapping des statuts en français
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Brouillon",
+  active: "En cours",
+  completed: "Terminé",
+  archived: "Archivé",
+};
+
+// Mapping des types de réseau en français
+const NETWORK_TYPE_LABELS: Record<string, string> = {
+  gsm_900: "GSM 900 MHz",
+  gsm_1800: "GSM 1800 MHz",
+  gsm_900_1800: "GSM 900/1800 MHz",
+  umts: "UMTS",
+  lte: "LTE",
+};
 
 export default function ProjectsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [projects, setProjects] = useState<Project[]>([])
+  const [newProjectType, setNewProjectType] = useState("")
+  const [user, setUser] = useState<User | null>(null)
+  const [Loading, setLoading] = useState(true)
 
-  const projects = [
-    {
-      id: 1,
-      name: "Projet Dakar Centre",
-      date: "2024-12-28",
-      type: "GSM 900",
-      description: "Dimensionnement du réseau GSM pour le centre-ville de Dakar",
-      status: "En cours",
-    },
-    {
-      id: 2,
-      name: "Couverture Thiès",
-      date: "2024-12-27",
-      type: "GSM 1800",
-      description: "Extension de couverture pour la région de Thiès",
-      status: "Terminé",
-    },
-    {
-      id: 3,
-      name: "Réseau Kaolack",
-      date: "2024-12-25",
-      type: "GSM 900/1800",
-      description: "Nouveau déploiement réseau bi-bande",
-      status: "En cours",
-    },
-    {
-      id: 4,
-      name: "Planification Ziguinchor",
-      date: "2024-12-24",
-      type: "GSM 900",
-      description: "Planification réseau pour la région sud",
-      status: "Brouillon",
-    },
-  ]
+  useEffect(() => {
+    fetch("http://localhost:8000/api/projects", {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Erreur lors du chargement des projets")
+        const data = await res.json()
+        setProjects(data)
+      })
+      .catch((err) => {
+        console.error(err)
+        alert("Impossible de charger les projets")
+      })
+  }, [])
+    useEffect(() => {
+    // Simuler une récupération de l'utilisateur connecté
+    const token= localStorage.getItem("token")
+    if(!token){
+      setLoading(false)
+      return 
+    }
+
+    fetch("http://localhost:8000/api/users/me",{
+      headers:{
+        Authorization : `Bearer ${token}`,
+      }
+    }) 
+    .then(async(res)=>{
+      if(!res.ok) throw new Error("Impossible de récupérer le profil")
+       const data = await res.json()
+       setUser(data)
+    })
+    .catch((err) =>{
+        console.error(err)
+        localStorage.removeItem("token") // On enléve le token invalide
+    })
+    .finally(() =>setLoading(false))
+  }, [])
 
   const filteredProjects = projects.filter(
     (project) =>
       project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.type.toLowerCase().includes(searchTerm.toLowerCase()),
+      project.network_type.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleCreateProject = (e: React.FormEvent) => {
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simuler la création du projet et redirection vers le calculateur
-    const newProjectId = Date.now()
-    window.location.href = `/calculator?project=${newProjectId}`
+
+    const formData = new FormData(e.currentTarget as HTMLFormElement)
+    const name = formData.get("project-name") as string
+    const description = formData.get("description") as string
+    const type = newProjectType
+
+    if (!type) {
+      alert("Veuillez sélectionner le type de réseau")
+      return
+    }
+
+    try {
+      const res = await fetch("http://localhost:8000/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          name,
+          description,
+          network_type: type,
+        }),
+      })
+
+      if (!res.ok) throw new Error("Erreur lors de la création du projet")
+
+      const newProject = await res.json()
+      setProjects((prev) => [...prev, newProject])
+
+      setShowCreateForm(false)
+      // Redirection vers le calculateur avec l'ID réel
+      window.location.href = `/calculator?project=${newProject.id}`
+    } catch (err) {
+      console.error(err)
+      alert("Erreur lors de la création du projet")
+    }
   }
+
+
+  
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -84,14 +162,11 @@ export default function ProjectsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => setShowCreateForm(true)} className="bg-emerald-600 hover:bg-emerald-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Nouveau Projet
-            </Button>
+           
             <Button variant="ghost" size="sm" asChild>
               <Link href="/profile">
                 <User className="w-4 h-4 mr-2" />
-                Jean D.
+                {user ? user.first_name : "Mon Compte"}
               </Link>
             </Button>
             <div className="flex items-center gap-2 ml-4">
@@ -135,9 +210,11 @@ export default function ProjectsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tous les types</SelectItem>
-                    <SelectItem value="gsm900">GSM 900</SelectItem>
-                    <SelectItem value="gsm1800">GSM 1800</SelectItem>
-                    <SelectItem value="gsm900-1800">GSM 900/1800</SelectItem>
+                    <SelectItem value="gsm_900">GSM 900 MHz</SelectItem>
+                    <SelectItem value="gsm_1800">GSM 1800 MHz</SelectItem>
+                    <SelectItem value="gsm_900_1800">GSM 900/1800 MHz</SelectItem>
+                    <SelectItem value="umts">UMTS</SelectItem>
+                    <SelectItem value="lte">LTE</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select>
@@ -147,8 +224,9 @@ export default function ProjectsPage() {
                   <SelectContent>
                     <SelectItem value="all">Tous les statuts</SelectItem>
                     <SelectItem value="draft">Brouillon</SelectItem>
-                    <SelectItem value="progress">En cours</SelectItem>
+                    <SelectItem value="active">En cours</SelectItem>
                     <SelectItem value="completed">Terminé</SelectItem>
+                    <SelectItem value="archived">Archivé</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -172,25 +250,27 @@ export default function ProjectsPage() {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="project-name">Nom du Projet *</Label>
-                      <Input id="project-name" placeholder="Ex: Réseau Dakar Centre" required />
+                      <Input id="project-name" name="project-name" placeholder="Ex: Réseau Dakar Centre" required />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="network-type">Type de Réseau *</Label>
-                      <Select required>
+                      <Select value={newProjectType} onValueChange={setNewProjectType} required>
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionner le type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="gsm900">GSM 900 MHz</SelectItem>
-                          <SelectItem value="gsm1800">GSM 1800 MHz</SelectItem>
-                          <SelectItem value="gsm900-1800">GSM 900/1800 MHz</SelectItem>
+                          <SelectItem value="gsm_900">GSM 900 MHz</SelectItem>
+                          <SelectItem value="gsm_1800">GSM 1800 MHz</SelectItem>
+                          <SelectItem value="gsm_900_1800">GSM 900/1800 MHz</SelectItem>
+                          <SelectItem value="umts">UMTS</SelectItem>
+                          <SelectItem value="lte">LTE</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
-                    <Textarea id="description" placeholder="Description du projet de dimensionnement..." rows={3} />
+                    <Textarea id="description" name = "description" placeholder="Description du projet de dimensionnement..." rows={3} />
                   </div>
                   <div className="flex gap-2 justify-end">
                     <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>
@@ -217,19 +297,19 @@ export default function ProjectsPage() {
                         {project.name}
                       </CardTitle>
                       <CardDescription className="mt-1">
-                        {project.type} • {project.date}
+                        {NETWORK_TYPE_LABELS[project.network_type] ?? project.network_type} • {project.date}
                       </CardDescription>
                     </div>
                     <div
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        project.status === "Terminé"
-                          ? "bg-green-100 text-green-700"
-                          : project.status === "En cours"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-gray-100 text-gray-700"
+                      className={`px-2 py-1 rounded-full text-xs font-semibold border${
+                        project.status === "completed"
+                          ? "border-green-500 text-green-600"
+                          : project.status === "active"
+                            ? "border-blue-500 text-blue-600"
+                            : "border-gray-400 text-gray-600"
                       }`}
                     >
-                      {project.status}
+                      {STATUS_LABELS[project.status]}
                     </div>
                   </div>
                 </CardHeader>

@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,22 +7,117 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+import { set } from "date-fns"
 import { Home, Radio, Save, Settings, User } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
-export default function ProfilePage() {
+interface User {
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  organization: string
+  bio: string
+}
+
+export default function ProfilPage() {
   const [isLoading, setIsLoading] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [role, setRole] = useState<string | undefined>()
+  const roleLabels: Record<string, string> = {
+    student: "Étudiant",
+    engineer: "Ingénieur Télécoms",
+    researcher: "Chercheur",
+    professor: "Professeur",
+    other: "Autre",
+  };
+  // Récupérer les infos de l'utilisateur connecté
+  useEffect(() => {
+    const token = localStorage.getItem("token")
+    if (!token) return
+
+    setIsLoading(true)
+
+    fetch("http://localhost:8000/api/users/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Impossible de récupérer le profil")
+        const data = await res.json()
+        setUser(data)
+        setRole(data.role) // Définir le rôle 
+      })
+      .catch((err) => {
+        console.error(err)
+        localStorage.removeItem("token")
+      })
+      .finally(() => setIsLoading(false))
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate save
-    setTimeout(() => {
-      setIsLoading(false)
-    }, 1000)
+
+    const token = localStorage.getItem("token")
+    if (!token) {
+      alert("Non authentifié")
+      return
+    }
+
+    try {
+      const res = await fetch("http://localhost:8000/api/users/me", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          first_name: (e.target as any).firstName.value,
+          last_name: (e.target as any).lastName.value,
+          email: (e.target as any).email.value,
+          phone: (e.target as any).phone.value,
+          role: role,
+          organization: (e.target as any).organization.value,
+          bio: (e.target as any).bio.value,
+        }),
+      })
+
+  if (res.status === 204) {
+    // No content
+    alert("Profil mis à jour !")
+    return
   }
 
+  const text = await res.text()
+
+  if (!res.ok) {
+    console.error("Réponse erreur :", text)
+    throw new Error(`Erreur lors de la mise à jour: ${res.status}`)
+  }
+
+  const data = text ? JSON.parse(text) : null
+
+  if (data) setUser(data)
+
+  alert("Profil mis à jour !")
+    } catch (err) {
+      console.error(err)
+      alert("Erreur lors de la sauvegarde")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (isLoading && !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        chargement ...
+      </div>
+    )
+  }
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -58,8 +151,8 @@ export default function ProfilePage() {
               <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <User className="w-10 h-10 text-emerald-600" />
               </div>
-              <CardTitle>Jean Dupont</CardTitle>
-              <CardDescription>Ingénieur Télécommunications</CardDescription>
+              <CardTitle>{user? `${user.first_name} ${user.last_name}` : "Utilisateur"} </CardTitle>
+              <CardDescription>{role ? roleLabels[role] : ""}</CardDescription>
             </CardHeader>
           </Card>
 
@@ -77,32 +170,32 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">Prénom</Label>
-                    <Input id="firstName" defaultValue="Jean" />
+                    <Input id="firstName" defaultValue={user?.first_name || ""} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Nom</Label>
-                    <Input id="lastName" defaultValue="Dupont" />
+                    <Input id="lastName" defaultValue={user?.last_name || ""} />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" defaultValue="jean.dupont@esp.sn" />
+                  <Input id="email" type="email" defaultValue={user?.email || ""} />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="phone">Téléphone</Label>
-                  <Input id="phone" type="tel" defaultValue="+221 77 123 45 67" />
+                  <Input id="phone" type="tel" defaultValue={user?.phone || ""} />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="organization">Organisation</Label>
-                  <Input id="organization" defaultValue="École Supérieure Polytechnique" />
+                  <Input id="organization" defaultValue={user?.organization || ""}/>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="role">Rôle</Label>
-                  <Select defaultValue="engineer">
+                  <Select value={role} onValueChange={setRole}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -121,7 +214,7 @@ export default function ProfilePage() {
                   <Textarea
                     id="bio"
                     placeholder="Parlez-nous de votre expérience en télécommunications..."
-                    defaultValue="Ingénieur spécialisé en réseaux mobiles avec 5 ans d'expérience dans le dimensionnement et la planification des réseaux GSM/UMTS."
+                    defaultValue={user?.bio || ""}
                   />
                 </div>
 
