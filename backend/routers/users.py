@@ -1,9 +1,9 @@
 # app/routers/users.py
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Body
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer
 from backend.database import SessionLocal, get_db
-from backend.schemas.user import UserCreate, UserResponse, UserLogin, UserUpdate
+from backend.schemas.user import UserCreate, UserResponse, UserLogin, UserUpdate, PasswordChange
 from backend.models.user import User
 import uuid
 import hashlib 
@@ -12,6 +12,9 @@ from fastapi.responses import JSONResponse
 from backend.auth import create_access_token, verify_token, SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 import time
 from backend.auth import get_current_user
+from pydantic import BaseModel, EmailStr
+from backend.utils.notifications import notify_welcome
+
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
@@ -43,6 +46,10 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    # Créer une notification de bienvenue
+    notify_welcome(db, new_user.id, new_user.first_name)
+    
     return new_user
 # ----------------------------Update user----------------------------
 @router.put("/users/me", response_model=UserResponse)
@@ -91,3 +98,45 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 @router.get("/users/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+class PasswordChangeWithEmail(BaseModel):
+    email: EmailStr
+    old_password: str
+    new_password: str
+
+@router.put("/users/change-password")
+def change_password(
+    passwords: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+    import hashlib
+    old_password_hash = hashlib.sha256(passwords.old_password.encode()).hexdigest()
+    if user.password_hash != old_password_hash:
+        raise HTTPException(status_code=400, detail="Ancien mot de passe incorrect")
+
+    new_password_hash = hashlib.sha256(passwords.new_password.encode()).hexdigest()
+    user.password_hash = new_password_hash
+    db.commit()
+    return {"message": "Mot de passe modifié avec succès"}
+
+@router.post("/users/change-password-with-email")
+def change_password_with_email(
+    data: PasswordChangeWithEmail = Body(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    import hashlib
+    old_password_hash = hashlib.sha256(data.old_password.encode()).hexdigest()
+    if user.password_hash != old_password_hash:
+        raise HTTPException(status_code=400, detail="Ancien mot de passe incorrect")
+    new_password_hash = hashlib.sha256(data.new_password.encode()).hexdigest()
+    setattr(user, 'password_hash', new_password_hash)
+    db.commit()
+    return {"message": "Mot de passe modifié avec succès"}

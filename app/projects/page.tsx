@@ -1,6 +1,8 @@
 "use client"
 
 import type React from "react"
+import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,10 +11,12 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { Calculator, FileText, FolderOpen, Home, Plus, Radio, Search, Trash2, Edit, User } from "lucide-react"
+import { Calculator, FileText, FolderOpen, Home, Plus, Radio, Search, Trash2, Edit, User, RefreshCcw, Settings } from "lucide-react"
 import Link from "next/link"
-import { useState, useEffect } from "react"
-
+import { toast } from "@/hooks/use-toast"
+import Navbar from "@/components/Navbar"
+import { useAuth, apiCall } from "@/hooks/useAuth"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 interface Project {
@@ -22,6 +26,7 @@ interface Project {
   network_type: string
   description: string
   status: string
+  etat?: string
 }
 interface User {
   first_name: string
@@ -32,6 +37,8 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
   active: "En cours",
   completed: "Terminé",
+  Terminé: "Terminé",
+  "En cours": "En cours",
   archived: "Archivé",
 };
 
@@ -49,54 +56,59 @@ export default function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [newProjectType, setNewProjectType] = useState("")
-  const [user, setUser] = useState<User | null>(null)
-  const [Loading, setLoading] = useState(true)
+  const [selectedType, setSelectedType] = useState("all")
+  const [selectedStatus, setSelectedStatus] = useState("all")
+  const router = useRouter();
+  const { user, loading, requireAuth } = useAuth()
+  const [projectToArchive, setProjectToArchive] = useState<Project | null>(null);
+  const [projectToRestore, setProjectToRestore] = useState<Project | null>(null);
+
+  // Vérifier l'authentification
+  useEffect(() => {
+    if (!loading && !user) {
+      requireAuth();
+    }
+  }, [loading, user, requireAuth]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/projects", {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Erreur lors du chargement des projets")
-        const data = await res.json()
-        setProjects(data)
-      })
-      .catch((err) => {
-        console.error(err)
-        alert("Impossible de charger les projets")
-      })
-  }, [])
-    useEffect(() => {
-    // Simuler une récupération de l'utilisateur connecté
-    const token= localStorage.getItem("token")
-    if(!token){
-      setLoading(false)
-      return 
-    }
-
-    fetch("http://localhost:8000/api/users/me",{
-      headers:{
-        Authorization : `Bearer ${token}`,
+    const loadProjects = async () => {
+      try {
+        const response = await apiCall("http://localhost:8000/api/projects");
+        const data = await response.json();
+        setProjects(data);
+      } catch (err) {
+        toast({ title: "Erreur", description: "Impossible de charger les projets", variant: "destructive" });
       }
-    }) 
-    .then(async(res)=>{
-      if(!res.ok) throw new Error("Impossible de récupérer le profil")
-       const data = await res.json()
-       setUser(data)
-    })
-    .catch((err) =>{
-        console.error(err)
-        localStorage.removeItem("token") // On enléve le token invalide
-    })
-    .finally(() =>setLoading(false))
+    };
+    
+    loadProjects();
   }, [])
+
 
   const filteredProjects = projects.filter(
-    (project) =>
-      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.network_type.toLowerCase().includes(searchTerm.toLowerCase())
+    (project) => {
+      const search = searchTerm.toLowerCase();
+      const matchesSearch =
+        project.name.toLowerCase().includes(search) ||
+        project.network_type.toLowerCase().includes(search) ||
+        (project.description || "").toLowerCase().includes(search) ||
+        (project.etat || project.status || "").toLowerCase().includes(search);
+      const matchesType = selectedType === "all" || project.network_type === selectedType;
+      let projectStatus = (project.etat || project.status || "").toLowerCase();
+      const statusMap: Record<string, string[]> = {
+        draft: ["brouillon"],
+        active: ["en cours", "active"],
+        completed: ["terminé", "completed"],
+        archived: ["archivé", "archived"]
+      };
+      // Par défaut, on exclut les archivés sauf si le filtre est explicitement sur 'archived'
+      if (selectedStatus === "all" && statusMap["archived"].includes(projectStatus)) {
+        return false;
+      }
+      const matchesStatus = selectedStatus === "all" ||
+        (statusMap[selectedStatus] && statusMap[selectedStatus].some((val: string) => projectStatus === val));
+      return matchesSearch && matchesType && matchesStatus;
+    }
   )
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -113,30 +125,27 @@ export default function ProjectsPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/api/projects", {
+      const response = await apiCall("http://localhost:8000/api/projects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
         body: JSON.stringify({
           name,
           description,
           network_type: type,
         }),
-      })
+      });
 
-      if (!res.ok) throw new Error("Erreur lors de la création du projet")
+      const newProject = await response.json();
+      setProjects((prev) => [...prev, newProject]);
 
-      const newProject = await res.json()
-      setProjects((prev) => [...prev, newProject])
-
-      setShowCreateForm(false)
+      setShowCreateForm(false);
+      toast({ title: "Succès", description: "Projet créé avec succès !" });
       // Redirection vers le calculateur avec l'ID réel
-      window.location.href = `/calculator?project=${newProject.id}`
+      window.location.href = `/calculator?project=${newProject.id}`;
     } catch (err) {
-      console.error(err)
-      alert("Erreur lors de la création du projet")
+      toast({ title: "Erreur", description: "Erreur lors de la création du projet", variant: "destructive" });
     }
   }
 
@@ -145,37 +154,12 @@ export default function ProjectsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/">
-                <Home className="w-4 h-4 mr-2" />
-                Accueil
-              </Link>
-            </Button>
-            <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-5 h-5 text-emerald-600" />
-              <span className="font-semibold">Gestion des Projets</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-           
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/profile">
-                <User className="w-4 h-4 mr-2" />
-                {user ? user.first_name : "Mon Compte"}
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2 ml-4">
-              <Radio className="w-6 h-6 text-emerald-600" />
-              <span className="font-bold">TelecomDim</span>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Navbar 
+        showHome={true}
+        showProjects={false}
+        title="Gestion des Projets"
+        subtitle="Mes Projets"
+      />
 
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
@@ -204,7 +188,7 @@ export default function ProjectsPage() {
                     className="pl-10"
                   />
                 </div>
-                <Select>
+                <Select value={selectedType} onValueChange={setSelectedType}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="Type de réseau" />
                   </SelectTrigger>
@@ -217,7 +201,7 @@ export default function ProjectsPage() {
                     <SelectItem value="lte">LTE</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="Statut" />
                   </SelectTrigger>
@@ -302,14 +286,14 @@ export default function ProjectsPage() {
                     </div>
                     <div
                       className={`px-2 py-1 rounded-full text-xs font-semibold border${
-                        project.status === "completed"
+                        (project.etat === "Terminé" || project.status === "completed")
                           ? "border-green-500 text-green-600"
-                          : project.status === "active"
+                          : (project.etat === "En cours" || project.status === "active")
                             ? "border-blue-500 text-blue-600"
                             : "border-gray-400 text-gray-600"
                       }`}
                     >
-                      {STATUS_LABELS[project.status]}
+                      {STATUS_LABELS[project.etat || project.status]}
                     </div>
                   </div>
                 </CardHeader>
@@ -322,15 +306,112 @@ export default function ProjectsPage() {
                         Ouvrir
                       </Link>
                     </Button>
-                    <Button size="sm" variant="outline">
-                      <Edit className="w-4 h-4" />
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/calculator?project=${project.id}&tab=parameters`}>
+                        <Edit className="w-4 h-4" />
+                      </Link>
                     </Button>
-                    <Button size="sm" variant="outline">
-                      <FileText className="w-4 h-4" />
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/calculator?project=${project.id}&tab=reports`}>
+                        <FileText className="w-4 h-4" />
+                      </Link>
                     </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 bg-transparent">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {((project.etat || project.status)?.toLowerCase() === "archivé" || (project.etat || project.status)?.toLowerCase() === "archived") ? (
+                      <AlertDialog open={!!projectToRestore && projectToRestore.id === project.id} onOpenChange={(open) => { if (!open) setProjectToRestore(null); }}>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="text-blue-600 hover:text-blue-700 bg-transparent flex items-center justify-center p-0 w-9 h-9 rounded-full border-2 border-blue-200 bg-blue-50 shadow-sm" onClick={() => setProjectToRestore(project)}>
+                            <span className="relative block w-7 h-7">
+                              <Settings className="absolute inset-0 w-7 h-7 text-blue-200" strokeWidth={2.5} />
+                              <RefreshCcw className="absolute inset-0 w-7 h-7 text-blue-800" strokeWidth={3} />
+                            </span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Restaurer ce projet ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Voulez-vous vraiment restaurer ce projet ? Il repassera en statut "En cours".
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={async () => {
+                              if (!projectToRestore) return;
+                              try {
+                                const res = await fetch(`http://localhost:8000/api/projects/${projectToRestore.id}`, {
+                                  method: "PUT",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                                  },
+                                  body: JSON.stringify({
+                                    name: projectToRestore.name,
+                                    description: projectToRestore.description,
+                                    network_type: projectToRestore.network_type,
+                                    etat: "En cours"
+                                  })
+                                });
+                                if (!res.ok) throw new Error("Erreur lors de la restauration du projet");
+                                toast({ title: "Succès", description: "Projet restauré avec succès ✅" });
+                                // Optionnel : recharger la liste si besoin
+                              } catch (err) {
+                                toast({ title: "Erreur", description: "Erreur lors de la restauration du projet", variant: "destructive" });
+                              } finally {
+                                setProjectToRestore(null);
+                              }
+                            }}>
+                              Restaurer
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    ) : (
+                      <AlertDialog open={!!projectToArchive && projectToArchive.id === project.id} onOpenChange={(open) => { if (!open) setProjectToArchive(null); }}>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 bg-transparent" onClick={() => setProjectToArchive(project)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Archiver ce projet ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Voulez-vous vraiment archiver ce projet ? Cette action est réversible.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={async () => {
+                              if (!projectToArchive) return;
+                              try {
+                                const res = await fetch(`http://localhost:8000/api/projects/${projectToArchive.id}`, {
+                                  method: "PUT",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                    Authorization: `Bearer ${localStorage.getItem("token")}`,
+                                  },
+                                  body: JSON.stringify({
+                                    name: projectToArchive.name,
+                                    description: projectToArchive.description,
+                                    network_type: projectToArchive.network_type,
+                                    etat: "Archivé"
+                                  })
+                                });
+                                if (!res.ok) throw new Error("Erreur lors de l'archivage du projet");
+                                setProjects((prev) => prev.filter((p) => p.id !== projectToArchive.id));
+                                toast({ title: "Succès", description: "Projet archivé avec succès ✅" });
+                              } catch (err) {
+                                toast({ title: "Erreur", description: "Erreur lors de l'archivage du projet", variant: "destructive" });
+                              } finally {
+                                setProjectToArchive(null);
+                              }
+                            }}>
+                              Archiver
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </div>
                 </CardContent>
               </Card>

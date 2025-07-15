@@ -8,6 +8,7 @@ from backend.database import get_db
 from backend.models.project import Project  # Le modèle SQLAlchemy Project
 from backend.schemas.project import ProjectCreate, ProjectResponse
 from backend.auth import get_current_user  # Le même get_current_user que dans users.py
+from backend.utils.notifications import notify_project_created
 
 router = APIRouter()
 
@@ -62,6 +63,10 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    
+    # Créer une notification
+    notify_project_created(db, current_user.id, project.name)
+    
     return project
 
 # ---------------------------------------------
@@ -102,7 +107,9 @@ def update_project(
     
     project.name = project_in.name
     project.description = project_in.description
-    project.type = project_in.network_type
+    project.network_type = project_in.network_type
+    if hasattr(project_in, "etat") and project_in.etat:
+        project.etat = project_in.etat
     db.commit()
     db.refresh(project)
     return project

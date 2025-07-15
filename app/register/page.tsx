@@ -49,7 +49,6 @@ export default function RegisterPage() {
       alert("Compte créer avec succès, vous pouvez maintenant vous connecter")
       window.location.href = "/login"
     }catch(error: any){
-      console.error("Erreur", error)
       alert(error.message || "Une erreur s'est produite lors de l'inscription")
     }finally{
       setLoading(false)
@@ -148,8 +147,6 @@ export default function RegisterPage() {
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-slate-500">
-          <p>© 2024 TelecomDim</p>
-          <p>DIC2_INFO/M1_GLSI/DGI/ESP/UCAD</p>
         </div>
       </div>
     </div>

@@ -6,12 +6,15 @@ class ProjectCreate(BaseModel):
     name: str
     description: Optional[str]
     network_type: str
+    etat: Optional[str] = None
+    status: Optional[str] = None
 
 class ProjectResponse(BaseModel):
     id: int
     name: str
     description: Optional[str]
     network_type: str
+    etat: str
     status: str
     created_at: datetime
 

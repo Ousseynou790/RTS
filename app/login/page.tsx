@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Radio } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
+import { toast } from "@/hooks/use-toast"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -26,15 +27,12 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    console.log("email:", email)
-    console.log("password:", password)
     try {
       const res = await fetch("http://localhost:8000/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       })
-      console.log("Réponse reçue", res.status)
       if (!res.ok) {
         const errorData = await res.json()
         const message =
@@ -44,28 +42,27 @@ export default function LoginPage() {
       throw new Error(message);
       } 
       const data = await res.json()
-      console.log("Données reçues", data)
       if (!data.access_token) {
         throw new Error("Réponse invalide du serveur")
       }
 
       localStorage.setItem("token", data.access_token)
-      alert("Connexion réussie!")
+      toast({ title: "Succès", description: "Connexion réussie!" })
    
       //  Rediriger
       window.location.href = "/"
     }
     catch (error: any) {
-      console.error("Erreur :", error)
+      toast({ title: "Erreur", description: error.message || "Erreur inconnue", variant: "destructive" })
     // Si c'est une erreur d'identifiants
     if (
       error.message.includes("Invalid credentials") ||
       error.message.includes("401") ||
       error.message.includes("Unauthorized")
     ) {
-      alert("Identifiants incorrects. Vérifiez votre email et mot de passe.");
+      toast({ title: "Erreur", description: "Identifiants incorrects. Vérifiez votre email et mot de passe.", variant: "destructive" });
     } else {
-      alert(error.message || "Erreur inconnue");
+      toast({ title: "Erreur", description: error.message || "Erreur inconnue", variant: "destructive" });
     }
     }
     finally{
@@ -107,7 +104,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 text-center space-y-2">
-              <Link href="" className="text-sm text-emerald-600 hover:text-emerald-700">
+              <Link href="/login/forgot" className="text-sm text-emerald-600 hover:text-emerald-700">
                 Mot de passe oublié ?
               </Link>
               <div className="text-sm text-slate-600">
@@ -122,8 +119,6 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-slate-500">
-          <p>© 2024 TelecomDim</p>
-          <p>DIC2_INFO/M1_GLSI/DGI/ESP/UCAD</p>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ class Project(Base):
     description = Column(String, nullable=True)
     network_type = Column(String, nullable=False)
     status = Column(String, default="En cours")
+    etat = Column(String(32), default="En cours")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)

@@ -10,7 +10,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { set } from "date-fns"
 import { Home, Radio, Save, Settings, User } from "lucide-react"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "@/hooks/use-toast"
+import { useNotificationsSocket } from "@/hooks/useNotificationsSocket"
+import Navbar from "@/components/Navbar"
+import { useAuth, apiCall } from "@/hooks/useAuth"
 
 interface User {
   first_name: string
@@ -23,7 +28,6 @@ interface User {
 
 export default function ProfilPage() {
   const [isLoading, setIsLoading] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | undefined>()
   const roleLabels: Record<string, string> = {
     student: "Étudiant",
@@ -32,30 +36,49 @@ export default function ProfilPage() {
     professor: "Professeur",
     other: "Autre",
   };
+  const [stats, setStats] = useState({ projects: 0, calculations: 0, reports: 0 });
+  const [pwdLoading, setPwdLoading] = useState(false)
+  const [pwdError, setPwdError] = useState<string|null>(null)
+  const [pwdSuccess, setPwdSuccess] = useState<string|null>(null)
+  const oldPwdRef = useRef<HTMLInputElement>(null)
+  const newPwdRef = useRef<HTMLInputElement>(null)
+  const confirmPwdRef = useRef<HTMLInputElement>(null)
+  const router = useRouter();
+  const { user, loading, requireAuth } = useAuth()
+  // Vérifier l'authentification
+  useEffect(() => {
+    if (!loading && !user) {
+      requireAuth();
+    }
+  }, [loading, user, requireAuth]);
   // Récupérer les infos de l'utilisateur connecté
   useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (!token) return
+    if (user) {
+      setRole((user as any).role); // Définir le rôle
+    }
+  }, [user])
 
-    setIsLoading(true)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    // Projets
+    fetch("http://localhost:8000/api/projects", { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setStats(s => ({ ...s, projects: data.length })))
+      .catch(() => {});
+    // Calculs
+    fetch("http://localhost:8000/api/calculations", { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setStats(s => ({ ...s, calculations: data.length })))
+      .catch(() => {});
+    // Rapports
+    fetch("http://localhost:8000/api/reports", { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setStats(s => ({ ...s, reports: data.length })))
+      .catch(() => {});
+  }, []);
 
-    fetch("http://localhost:8000/api/users/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Impossible de récupérer le profil")
-        const data = await res.json()
-        setUser(data)
-        setRole(data.role) // Définir le rôle 
-      })
-      .catch((err) => {
-        console.error(err)
-        localStorage.removeItem("token")
-      })
-      .finally(() => setIsLoading(false))
-  }, [])
+  useNotificationsSocket(user && (user as any).id)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +86,7 @@ export default function ProfilPage() {
 
     const token = localStorage.getItem("token")
     if (!token) {
-      alert("Non authentifié")
+      toast({ title: "Erreur", description: "Non authentifié", variant: "destructive" });
       return
     }
 
@@ -87,29 +110,79 @@ export default function ProfilPage() {
 
   if (res.status === 204) {
     // No content
-    alert("Profil mis à jour !")
+    toast({ title: "Succès", description: "Profil mis à jour !" })
     return
   }
 
   const text = await res.text()
 
   if (!res.ok) {
-    console.error("Réponse erreur :", text)
+    toast({ title: "Erreur", description: "Erreur lors de la mise à jour du profil", variant: "destructive" })
     throw new Error(`Erreur lors de la mise à jour: ${res.status}`)
   }
 
   const data = text ? JSON.parse(text) : null
 
-  if (data) setUser(data)
-
-  alert("Profil mis à jour !")
+  toast({ title: "Succès", description: "Profil mis à jour !" })
     } catch (err) {
-      console.error(err)
-      alert("Erreur lors de la sauvegarde")
+      toast({ title: "Erreur", description: "Erreur lors de la sauvegarde du profil", variant: "destructive" })
     } finally {
       setIsLoading(false)
     }
   }
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwdError(null)
+    setPwdSuccess(null)
+    if (!oldPwdRef.current || !newPwdRef.current || !confirmPwdRef.current) return
+    const old_password = oldPwdRef.current.value
+    const new_password = newPwdRef.current.value
+    const confirm_password = confirmPwdRef.current.value
+    if (new_password !== confirm_password) {
+      toast({ title: "Erreur", description: "Les mots de passe ne correspondent pas.", variant: "destructive" });
+      return
+    }
+    if (new_password.length < 6) {
+      toast({ title: "Erreur", description: "Le nouveau mot de passe doit contenir au moins 6 caractères.", variant: "destructive" });
+      return
+    }
+    setPwdLoading(true)
+    const token = localStorage.getItem("token")
+    if (!token) {
+      toast({ title: "Erreur", description: "Non authentifié", variant: "destructive" });
+      setPwdLoading(false)
+      return
+    }
+    try {
+      const res = await fetch("http://localhost:8000/api/users/change-password", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ old_password, new_password }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast({ title: "Erreur", description: data.detail || "Erreur lors du changement de mot de passe", variant: "destructive" });
+      } else {
+        toast({ title: "Succès", description: "Mot de passe modifié avec succès !" });
+        oldPwdRef.current.value = ""
+        newPwdRef.current.value = ""
+        confirmPwdRef.current.value = ""
+      }
+    } catch (err) {
+      toast({ title: "Erreur", description: "Erreur réseau ou serveur", variant: "destructive" });
+    } finally {
+      setPwdLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    router.push("/login");
+  };
 
   if (isLoading && !user) {
     return (
@@ -120,28 +193,12 @@ export default function ProfilPage() {
   }
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/">
-                <Home className="w-4 h-4 mr-2" />
-                Accueil
-              </Link>
-            </Button>
-            <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-emerald-600" />
-              <span className="font-semibold">Profil Utilisateur</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Radio className="w-6 h-6 text-emerald-600" />
-            <span className="font-bold">TelecomDim</span>
-          </div>
-        </div>
-      </header>
+      <Navbar 
+        showHome={true}
+        showProjects={false}
+        title="Profil Utilisateur"
+        subtitle="Gestion du compte"
+      />
 
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto space-y-6">
@@ -235,15 +292,15 @@ export default function ProfilPage() {
             <CardContent>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <div className="text-2xl font-bold text-emerald-600">12</div>
+                  <div className="text-2xl font-bold text-emerald-600">{stats.projects}</div>
                   <div className="text-sm text-slate-600">Projets créés</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-blue-600">48</div>
+                  <div className="text-2xl font-bold text-blue-600">{stats.calculations}</div>
                   <div className="text-sm text-slate-600">Calculs effectués</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-purple-600">6</div>
+                  <div className="text-2xl font-bold text-purple-600">{stats.reports}</div>
                   <div className="text-sm text-slate-600">Rapports générés</div>
                 </div>
               </div>
@@ -262,20 +319,28 @@ export default function ProfilPage() {
                   <div className="font-medium">Mot de passe</div>
                   <div className="text-sm text-slate-600">Dernière modification il y a 30 jours</div>
                 </div>
-                <Button variant="outline" size="sm">
-                  Modifier
-                </Button>
               </div>
               <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium">Authentification à deux facteurs</div>
-                  <div className="text-sm text-slate-600">Sécurisez votre compte avec 2FA</div>
+              <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
+                <div className="space-y-2">
+                  <Label htmlFor="old_password">Ancien mot de passe</Label>
+                  <Input id="old_password" type="password" ref={oldPwdRef} required autoComplete="current-password" />
                 </div>
-                <Button variant="outline" size="sm">
-                  Activer
+                <div className="space-y-2">
+                  <Label htmlFor="new_password">Nouveau mot de passe</Label>
+                  <Input id="new_password" type="password" ref={newPwdRef} required autoComplete="new-password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm_password">Confirmer le nouveau mot de passe</Label>
+                  <Input id="confirm_password" type="password" ref={confirmPwdRef} required autoComplete="new-password" />
+                </div>
+                {pwdError && <div className="text-red-600 text-sm">{pwdError}</div>}
+                {pwdSuccess && <div className="text-green-600 text-sm">{pwdSuccess}</div>}
+                <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={pwdLoading}>
+                  {pwdLoading ? "Changement..." : "Changer le mot de passe"}
                 </Button>
-              </div>
+              </form>
+              {/* Section 2FA supprimée */}
             </CardContent>
           </Card>
         </div>

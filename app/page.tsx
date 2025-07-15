@@ -5,6 +5,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/comp
 import {FolderOpen, Plus, Radio, Settings, User, LogIn, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect} from "react"
+import Navbar from "@/components/Navbar"
 
 interface User {
   first_name: string
@@ -35,7 +36,6 @@ export default function HomePage() {
        setUser(data)
     })
     .catch((err) =>{
-        console.error(err)
         localStorage.removeItem("token") // On enléve le token invalide
     })
     .finally(() =>setLoading(false))
@@ -50,59 +50,7 @@ export default function HomePage() {
   }
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-              <Radio className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">TelecomDim</h1>
-              <p className="text-sm text-slate-600">Outil de dimensionnement GSM</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {user ? (
-              // Menu utilisateur connecté
-              <>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/profile">
-                    <User className="w-4 h-4 mr-2" />
-                    {user.first_name}
-                  </Link>
-                </Button>
-                {/* <Button variant="ghost" size="sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Paramètres
-                </Button> */}
-                <Button variant="outline" size="sm" onClick={() => {localStorage.removeItem("token") 
-                setUser(null)}}
-                >
-                  Déconnexion
-                </Button>
-              </>
-            ) : (
-              // Menu utilisateur non connecté
-              <>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/login">
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Se Connecter
-                  </Link>
-                </Button>
-                <Button variant="default" size="sm" className="bg-emerald-600 hover:bg-emerald-700" asChild>
-                  <Link href="/register">
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    S'inscrire
-                  </Link>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12">
@@ -247,8 +195,6 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="border-t bg-white/80 backdrop-blur-sm mt-16">
         <div className="container mx-auto px-4 py-6 text-center text-slate-600">
-          <p>© 2025 TelecomDim - Outil de dimensionnement des systèmes de télécommunications</p>
-          <p className="text-sm mt-1">M1_GLSI/DGI/ESP/UCAD - Dr FALL</p>
         </div>
       </footer>
     </div>

@@ -37,9 +37,9 @@ class UserResponse(BaseModel):
     last_name: str
     role: UserRole
     is_active: bool
-    phone : str
-    bio : str
-    organization:str
+    phone: Optional[str] = None
+    bio: Optional[str] = None
+    organization: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -68,4 +68,8 @@ class UserOutput(BaseModel):
 
     class Config:
         orm_mode = True
+
+class PasswordChange(BaseModel):
+    old_password: str
+    new_password: str
 

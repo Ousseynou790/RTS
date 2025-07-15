@@ -4,9 +4,9 @@ from typing import Annotated
 from fastapi import Depends as Depend
 from sqlalchemy.orm import Session
 
-DATABASE_URL = "mysql+pymysql://root:@localhost/dimensionnement_gsm"
+DATABASE_URL = "mysql+pymysql://root:@localhost/dimensionnement_gsm?charset=utf8mb4"
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
